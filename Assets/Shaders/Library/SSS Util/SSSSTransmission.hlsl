@@ -18,9 +18,25 @@ float3 GetTransmissionDistance()
     return lerp(farDistance, nearDistance, balance);
 }
 
-// Sigma-driven transmission.
-// Larger sigma means that colour channel survives through more thickness.
-// This falloff is based on Beer-Lambert's Law
+// Beer-Lambert-style transmission.
+//
+// Physical form:
+//
+//     T = exp(-sigma_t * d)
+//
+// where sigma_t is the extinction coefficient and d is the travelled distance
+// through the material.
+//
+// Note: sigma_t is different from _SSSS_NearSigma or _SSSS_FarSigma.
+// In this shader, NearSigma and FarSigma are reused from the Gaussian blur
+// controls and treated as artist-friendly transmission distances D:
+
+//     D = 1 / sigma_t
+//     D = NearSigma/FarSigma * ScatterScale
+//     T = exp(-d / D)
+//
+// This means larger NearSigma/FarSigma values cause slower attenuation,
+// while a larger physical sigma_t would cause faster attenuation.
 float3 ArtistTransmissionProfile(float thickness)
 {
     float3 distanceRGB = GetTransmissionDistance();
