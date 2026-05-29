@@ -1,0 +1,379 @@
+﻿Shader "bentoBAUX/Master Shaders/Separable SSS Master"
+{
+    Properties
+    {
+        _BaseColor ("Base Color", Color) = (1,1,1,1)
+        _BaseMap ("Base Map", 2D) = "white" {}
+        [Normal]_NormalMap ("Normal Map", 2D) = "bump" {}
+        _NormalStrength ("Normal Strength", Float) = 1
+        [Normal]_MicroNormalMap("Micro Normal Map", 2D) = "bump"{}
+        _MicroNormalStrength("Micro Normal Strength", Float) = 1
+        _MicroNormalScale("Micro Normal Scale", Float) = 10
+
+        _MixNormals("Normal Mix Factor", Range(0,1)) = 0.5
+
+        [Enum(Lambert,0, BlinnPhong,1, PBR,2)]
+        _LightingModel("Lighting Model", Float) = 0
+
+        // Blinn Phong
+        _k("K Factors", Vector) = (0.25,0.5,0.25)
+        _SpecularExponent("Shininess", Range(1,128)) = 32
+
+        // PBR
+        _Roughness("Roughness", Range(0.02,1)) = 0.5
+        [Toggle(_USE_ROUGHNESS_MAP)] _UseRoughnessMap("Use Roughness Map", Float) = 0
+        _RoughnessMap("Roughness Map", 2D) = "black" {}
+        _RoughnessStrength("Roughness Strength", Float) = 1
+
+        _Metallic("Metallic", Range(0,1)) = 0.5
+        [Toggle(_USE_METALLIC_MAP)] _UseMetallicMap("Use Metallic Map", Float) = 0
+        _MetallicMap("Metallic Map", 2D) = "white"{}
+        _MetallicStrength("Metallic Strength", Float) = 1
+
+        _Specular("Specular", Float) = 0.04
+        [Toggle(_USE_Specular_Map)] _UseSpecularMap("Use Specular Map", Float) = 0
+        _SpecularMap("Specular Map", 2D) = "white" {}
+        _SpecularStrength("Specular Strength", Float) = 1
+
+        _AOMap("Ambient Occlusion Map", 2D) = "white" {}
+        _AOStrength("AO Strength", Float) = 1
+
+        _ThicknessMap("Thickness Map", 2D) = "white" {}
+        _ThicknessMultiplier("Thickness Multiplier", Float) = 1
+
+    }
+
+    SubShader
+    {
+        Tags
+        {
+            "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline"
+        }
+
+        Pass
+        {
+            // The LightMode tag matches the ShaderPassName set in UniversalRenderPipeline.cs.
+            // The SRPDefaultUnlit pass and passes without the LightMode tag are also rendered by URP
+            Name "ForwardLit"
+            Tags
+            {
+                "LightMode" = "UniversalForward"
+            }
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+
+            #pragma shader_feature_local _LM_LAMBERT _LM_BLINNPHONG _LM_PBR
+
+            #pragma shader_feature_local _USE_ROUGHNESS_MAP
+            #pragma shader_feature_local _USE_METALLIC_MAP
+            #pragma shader_feature_local _USE_SPECULAR_MAP
+            #pragma shader_feature_local _USE_TONEMAPPING
+
+            #pragma shader_feature_local _SSS_ON
+
+            #pragma multi_compile_fog
+
+            // This multi_compile declaration is required for the Forward rendering path
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+
+            // This multi_compile declaration is required for the Forward+ rendering path
+            #pragma multi_compile _ _FORWARD_PLUS
+
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/RealtimeLights.hlsl"
+
+            struct Attributes
+            {
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct Varyings
+            {
+                float4 positionCS : SV_POSITION;
+                float3 positionWS : TEXCOORD0;
+                float3x3 TBN : TEXCOORD1;
+                float2 uv : TEXCOORD4;
+            };
+
+            struct Surf
+            {
+                float3 posWS;
+                float3 normalWS;
+                float3 viewDirectionWS;
+                float2 uv;
+                float4 baseColor;
+                float alpha;
+                float metallic;
+                float specular;
+                float roughness;
+                float ao;
+                float thickness;
+            };
+
+            struct FragOutput
+            {
+                float4 diffuseBuffer: SV_Target0;
+                float4 specularBuffer: SV_Target1;
+                float4 ambientBuffer : SV_Target2;
+            };
+
+            CBUFFER_START(UnityPerMaterial)
+                half4 _BaseColor;
+                float4 _BaseMap_ST;
+                float _NormalStrength;
+                float _MicroNormalStrength;
+                float _MicroNormalScale;
+                float _MixNormals;
+
+                float3 _k;
+                float _SpecularExponent;
+
+                float _Roughness;
+                float _RoughnessStrength;
+                float _Metallic;
+                float _MetallicStrength;
+                float _Specular;
+                float _SpecularStrength;
+                float _AOStrength;
+
+                float _ThicknessMultiplier;
+            CBUFFER_END
+
+            TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
+
+            TEXTURE2D(_NormalMap);
+            SAMPLER(sampler_NormalMap);
+
+            TEXTURE2D(_MicroNormalMap);
+            SAMPLER(sampler_MicroNormalMap);
+
+            TEXTURE2D(_RoughnessMap);
+            SAMPLER(sampler_RoughnessMap);
+
+            TEXTURE2D(_MetallicMap);
+            SAMPLER(sampler_MetallicMap);
+
+            TEXTURE2D(_SpecularMap);
+            SAMPLER(sampler_SpecularMap);
+
+            TEXTURE2D(_AOMap);
+            SAMPLER(sampler_AOMap);
+
+            TEXTURE2D(_ThicknessMap);
+            SAMPLER(sampler_ThicknessMap);
+
+            #include "Assets/Shaders/Library/Lighting/SSSS/SSSSLambert.hlsl"
+            #include "Assets/Shaders/Library/Lighting/SSSS/SSSSBlinnPhong.hlsl"
+            #include "Assets/Shaders/Library/Lighting/SSSS/SSSSPBR.hlsl"
+            #include "Assets/Shaders/Library/SSS Util/SSSSTransmission.hlsl"
+
+            Varyings vert(Attributes IN)
+            {
+                Varyings OUT;
+
+                // Positions
+                OUT.positionWS = TransformObjectToWorld(IN.positionOS.xyz);
+                OUT.positionCS = TransformWorldToHClip(OUT.positionWS);
+
+                // Build TBN
+                float3 N = normalize(TransformObjectToWorldNormal(IN.normalOS));
+                float3 T = normalize(TransformObjectToWorldDir(IN.tangentOS.xyz));
+                T = normalize(T - N * dot(N, T)); // Re-orthogonalize using one step of Gram-Schmidt in case of small import errors.
+                float3 B = normalize(cross(N, T)) * IN.tangentOS.w;
+                OUT.TBN = float3x3(T, B, N);
+
+                // UV Transform
+                OUT.uv = IN.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
+
+                return OUT;
+            }
+
+            half3 ProcessNormals(Varyings IN)
+            {
+                // Tangent-space normal from normal map
+                half3 nTS = UnpackNormal(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap, IN.uv));
+                nTS.xy *= _NormalStrength;
+                nTS = normalize(nTS);
+
+                half3 mnTS = UnpackNormal(SAMPLE_TEXTURE2D(_MicroNormalMap, sampler_MicroNormalMap, IN.uv * _MicroNormalScale));
+                mnTS.xy *= _MicroNormalStrength;
+                mnTS = normalize(mnTS);
+
+                float3 mixedN = BlendNormalRNM(nTS, mnTS); // For proper normal blending
+                mixedN = normalize(lerp(nTS, mixedN, _MixNormals));
+
+                // IN.TBN is world->tangent, so transpose(TBN) = tangent->world
+                return normalize(mul(transpose(IN.TBN), mixedN));
+            }
+
+            // https://discussions.unity.com/t/how-to-compute-fog-in-hlsl-on-urp/943637/4
+            void ApplyFog(inout float4 color, float3 positionWS)
+            {
+                #if defined(FOG_LINEAR) || defined(FOG_EXP) || defined(FOG_EXP2)
+                    float viewZ = -TransformWorldToView(positionWS).z;
+                    float nearZ0ToFarZ = max(viewZ - _ProjectionParams.y, 0);
+                    float density = 1.0f - ComputeFogIntensity(ComputeFogFactorZ0ToFar(nearZ0ToFarZ));
+
+                    color = lerp(color, unity_FogColor,  density);
+                #else
+                color = color;
+                #endif
+            }
+
+            // This function loops through the lights in the scene
+            FragOutput LightLoop(Surf surfaceData, InputData inputData)
+            {
+                FragOutput lit = (FragOutput)0;
+
+                float4 c = surfaceData.baseColor;
+
+                // Main light
+                Light mainLight = GetMainLight();
+                #if defined(_LM_LAMBERT)
+                lit.diffuseBuffer += Lambert(inputData.normalWS, mainLight).diffuseBuffer;
+                #elif defined(_LM_BLINNPHONG)
+                    lit.diffuseBuffer += BlinnPhong(surfaceData, mainLight).diffuseBuffer;
+                    lit.specularBuffer += BlinnPhong(surfaceData, mainLight).specularBuffer;
+                #elif defined(_LM_PBR)
+                    lit.diffuseBuffer += PBR(surfaceData, mainLight).diffuseBuffer;
+                    lit.specularBuffer += PBR(surfaceData, mainLight).specularBuffer;
+                #endif
+
+                lit.diffuseBuffer += float4(CalculateTransmittance(surfaceData, mainLight), 1);
+
+                #if defined(_ADDITIONAL_LIGHTS)
+                #if USE_FORWARD_PLUS
+                UNITY_LOOP for (uint i = 0; i < min(URP_FP_DIRECTIONAL_LIGHTS_COUNT, MAX_VISIBLE_LIGHTS); i++)
+                {
+                    Light addL = GetAdditionalLight(i, inputData.positionWS, half4(1,1,1,1));
+                #if defined(_LM_LAMBERT)
+                lit.diffuseBuffer += Lambert(inputData.normalWS, addL).diffuseBuffer;
+                #elif defined(_LM_BLINNPHONG)
+                lit.diffuseBuffer += BlinnPhong(surfaceData, addL).diffuseBuffer;
+                lit.specularBuffer += BlinnPhong(surfaceData, addL).specularBuffer;
+                #elif defined(_LM_PBR)
+                lit.diffuseBuffer += PBR(surfaceData, addL).diffuseBuffer;
+                lit.specularBuffer += PBR(surfaceData, addL).specularBuffer;
+                #endif
+                lit.diffuseBuffer += float4(CalculateTransmittance(surfaceData,addL),1);
+
+                }
+                #endif
+
+                uint count = GetAdditionalLightsCount();
+                LIGHT_LOOP_BEGIN(count)
+                    Light addL = GetAdditionalLight(lightIndex, inputData.positionWS, half4(1,1,1,1));
+                #if defined(_LM_LAMBERT)
+                lit.diffuseBuffer += Lambert(inputData.normalWS, addL).diffuseBuffer;
+                #elif defined(_LM_BLINNPHONG)
+                lit.diffuseBuffer += BlinnPhong(surfaceData, addL).diffuseBuffer;
+                lit.specularBuffer += BlinnPhong(surfaceData, addL).specularBuffer;
+                #elif defined(_LM_PBR)
+                lit.diffuseBuffer += PBR(surfaceData, addL).diffuseBuffer;
+                lit.specularBuffer += PBR(surfaceData, addL).specularBuffer;
+                #endif
+                lit.diffuseBuffer += float4(CalculateTransmittance(surfaceData,addL),1);
+
+                LIGHT_LOOP_END
+                #endif
+
+                // Ambient is only added once
+                #if defined(_LM_BLINNPHONG)
+                float3 ambient = _k.x * c * SampleSH(surfaceData.normalWS);
+                lit.ambientBuffer += float4(ambient,1);
+                #elif defined(_LM_PBR)
+                float3 ambient = .1 * c * surfaceData.ao * SampleSH(surfaceData.normalWS);
+                lit.ambientBuffer += float4(ambient,1);
+                #endif
+
+                return lit;
+            }
+
+            FragOutput frag(Varyings IN)
+            {
+                // The Forward+ light loop (LIGHT_LOOP_BEGIN) requires the InputData struct to be in its scope.
+                InputData inputData = (InputData)0;
+                inputData.positionWS = IN.positionWS;
+                inputData.normalWS = ProcessNormals(IN);
+                inputData.viewDirectionWS = GetWorldSpaceNormalizeViewDir(IN.positionWS);
+                inputData.normalizedScreenSpaceUV = GetNormalizedScreenSpaceUV(IN.positionCS);
+
+                // Surface data setup
+                Surf surfaceData = (Surf)0;
+                surfaceData.posWS = inputData.positionWS;
+                surfaceData.normalWS = inputData.normalWS;
+                surfaceData.viewDirectionWS = inputData.viewDirectionWS;
+                surfaceData.baseColor = _BaseColor * SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv);
+                surfaceData.alpha = surfaceData.baseColor.a * _BaseColor.a;
+                surfaceData.uv = IN.uv;
+
+                #ifdef _USE_ROUGHNESS_MAP
+                surfaceData.roughness = SAMPLE_TEXTURE2D(_RoughnessMap, sampler_RoughnessMap, IN.uv).r * _RoughnessStrength;
+                #else
+                surfaceData.roughness = _Roughness;
+                #endif
+
+                #ifdef _USE_METALLIC_MAP
+                surfaceData.metallic = SAMPLE_TEXTURE2D(_MetallicMap, sampler_MetallicMap, IN.uv).r * _MetallicStrength;
+                #else
+                surfaceData.metallic = _Metallic;
+                #endif
+
+                #ifdef _USE_SPECULAR_MAP
+                surfaceData.specular = SAMPLE_TEXTURE2D(_SpecularMap, sampler_SpecularMap, IN.uv).r * _SpecularStrength;
+                #else
+                surfaceData.specular = _Specular;
+                #endif
+
+                surfaceData.ao = SAMPLE_TEXTURE2D(_AOMap, sampler_AOMap, IN.uv).r * _AOStrength;
+                surfaceData.thickness = SAMPLE_TEXTURE2D(_ThicknessMap, sampler_ThicknessMap, IN.uv).r * _ThicknessMultiplier;
+
+                // Calculate Lighting
+                FragOutput o = LightLoop(surfaceData, inputData);
+
+                // TODO: FIX FOG APPLICATION AFTER COMPOSITION
+                float4 finalColor = float4(o.diffuseBuffer.rgb + o.specularBuffer.rgb, surfaceData.alpha);
+                ApplyFog(finalColor, IN.positionWS);
+                // END TODO
+
+                return o;
+            }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags
+            {
+                "LightMode" = "ShadowCaster"
+            }
+
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            #pragma target 2.0
+
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }
+    }
+    CustomEditor "bentoBAUX.SSSSGUI"
+}
