@@ -33,8 +33,8 @@ Shader "bentoBAUX/SSSS Util/Compositor"
 
         // Use the diffuse buffer as a simple mask for pixels rendered by the SSS shader.
         float maskSource = max(diffuse.r, max(diffuse.g, diffuse.b));
-        //float mask = step(0.001, maskSource);
-        float mask = smoothstep(0.001,0.5, maskSource);
+        float mask = step(0.001, maskSource);
+        //float mask = smoothstep(0.001,0.5, maskSource);
 
         // Blend between the original diffuse lighting and the blurred SSS result.
         float3 sssRatio = lerp(diffuse, processed, _SSSS_SubsurfaceWeight);

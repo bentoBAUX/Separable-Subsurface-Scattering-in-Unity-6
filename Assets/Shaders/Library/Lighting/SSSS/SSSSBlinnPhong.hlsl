@@ -16,7 +16,8 @@ inline FragOutput BlinnPhong(Surf surfaceData, Light lightData)
     half Id = _k.y * NdotL;
     half Is = _k.z * pow(saturate(dot(h, n)), _SpecularExponent);
 
-    float atten = lightData.distanceAttenuation * lightData.shadowAttenuation;
+    float shadow = lerp(0.005, 1, lightData.shadowAttenuation); // Avoid total black (looks shit)
+    float atten = lightData.distanceAttenuation * shadow;
 
     half3 diffuse = Id * c * lightData.color * atten;
     half3 specular = Is * lightData.color * atten;

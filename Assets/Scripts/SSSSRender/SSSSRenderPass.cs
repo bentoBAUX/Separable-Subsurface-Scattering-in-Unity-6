@@ -106,7 +106,6 @@ public class SSSSRenderPass : ScriptableRenderPass
         // 2) Setup: Create MRT textures matching the camera target.
         RenderTextureDescriptor desc = cameraData.cameraTargetDescriptor;
         desc.depthBufferBits = 0;
-        desc.msaaSamples = 1;
 
         TextureHandle ambientTexture = UniversalRenderer.CreateRenderGraphTexture(renderGraph, desc, "_SSSSAmbientTexture", false);
         TextureHandle diffuseTexture = UniversalRenderer.CreateRenderGraphTexture(renderGraph, desc, "_SSSSDiffuseTexture", false);

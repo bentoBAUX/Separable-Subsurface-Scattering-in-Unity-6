@@ -11,7 +11,9 @@ inline float3 PBR(Surf surfaceData, Light lightData)
     float3 v = normalize(surfaceData.viewDirectionWS);
     float3 l = normalize(lightData.direction);
     float3 h = normalize(v + l);
-    float3 radiance = lightData.color.rgb * lightData.distanceAttenuation * lightData.shadowAttenuation;
+    
+    float shadow = lerp(0.005, 1, lightData.shadowAttenuation); // Avoid total black (looks shit)
+    float3 radiance = lightData.color.rgb * lightData.distanceAttenuation * shadow;
     float roughness = max(surfaceData.roughness, 0.02);
     float metallic = surfaceData.metallic;
 

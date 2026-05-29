@@ -226,7 +226,8 @@ Shader "bentoBAUX/Master Shaders/PBR Master"
                 float4 c = surfaceData.baseColor;
 
                 // Main light
-                Light mainLight = GetMainLight();
+                float4 shadowCoord = TransformWorldToShadowCoord(inputData.positionWS);
+                Light mainLight = GetMainLight(shadowCoord);
                 #if defined(_LM_LAMBERT)
                 lit += Lambert(inputData.normalWS, mainLight);
                 #elif defined(_LM_BLINNPHONG)

@@ -77,6 +77,8 @@
 
             // This multi_compile declaration is required for the Forward rendering path
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
 
             // This multi_compile declaration is required for the Forward+ rendering path
             #pragma multi_compile _ _FORWARD_PLUS
@@ -239,7 +241,8 @@
                 float4 c = surfaceData.baseColor;
 
                 // Main light
-                Light mainLight = GetMainLight();
+                float4 shadowCoord = TransformWorldToShadowCoord(inputData.positionWS);
+                Light mainLight = GetMainLight(shadowCoord);
                 #if defined(_LM_LAMBERT)
                 lit.diffuseBuffer += Lambert(inputData.normalWS, mainLight).diffuseBuffer;
                 #elif defined(_LM_BLINNPHONG)
