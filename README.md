@@ -6,6 +6,4 @@ This repository contains the source code for my implementation of Separable Subs
 
 ## Technical Devlog
 
-For the full technical breakdown, including the Render Graph setup, shader pipeline, masking approach, limitations, and material showcase, read the devlog:
-
-**[Read the full devlog](TBA)**
+For the full technical breakdown, including the Render Graph setup, shader pipeline, masking approach, limitations, and material showcase, **[read the full devlog](TBA)**
